@@ -1,0 +1,42 @@
+```diff
+--- a/homeassistant/components/home_connect/switch.py
++++ b/homeassistant/components/home_connect/switch.py
+@@ -245,21 +245,23 @@
+         program: EnumerateProgram,
+     ) -> None:
+         """Initialize the entity."""
+-        desc = " ".join(["Program", program.key.split(".")[-1]])
++        entity_specific_name_part = " ".join(["Program", program.key.split(".")[-1]])
+         if appliance.info.type == "WasherDryer":
+-            desc = " ".join(
++            entity_specific_name_part = " ".join(
+                 ["Program", program.key.split(".")[-3], program.key.split(".")[-1]]
+             )
+         self.program = program
++        # EntityDescription for super class.
++        # Key is EventKey.BSH_COMMON_ROOT_ACTIVE_PROGRAM for the listener context.
++        # Name is entity_specific_name_part for HA to form the entity name.
+         super().__init__(
+             coordinator,
+             appliance,
+             SwitchEntityDescription(
+                 key=EventKey.BSH_COMMON_ROOT_ACTIVE_PROGRAM,
++                name=entity_specific_name_part,
+                 entity_registry_enabled_default=False,
+             ),
+         )
+-        self._attr_name = f"{appliance.info.name} {desc}"
+-        self._attr_unique_id = f"{appliance.info.ha_id}-{desc}"
+-        self._attr_has_entity_name = False
++        # Unique ID must be set manually as self.entity_description.key is not program-specific.
++        # Using program.key for a stable unique ID.
++        self._attr_unique_id = f"{appliance.info.ha_id}-{program.key}"
++        # _attr_has_entity_name = True is inherited.
++        # self.entity_description.name is used by HA for the entity name suffix.
++        # The self._attr_name line from original code (which constructed the full name) is removed.
++        # The self._attr_has_entity_name = False line from original code is removed.
+
+     async def async_added_to_hass(self) -> None:
+         """Call when entity is added to hass."""
+
+```

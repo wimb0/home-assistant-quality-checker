@@ -147,6 +147,26 @@ def get_quality_scale_rules(core_path: Path) -> dict[str, list[str]]:
     return rules
 
 
+def get_integration_files_for_prompt(integration_path: Path) -> list[str]:
+    """
+    Get all files for the integration to be used in the prompt.
+    """
+    name = integration_path.name
+    integration_files = ["--- START OF ATTACHED FILES ---"]
+    for file_path in integration_path.rglob("*"):
+        if "__pycache__" in file_path.parts or not file_path.is_file():
+            continue
+
+        integration_files.append(
+            f"\n\n--- FILE: homeassistant/components/{name}/{file_path.relative_to(integration_path)} ---\n\n"
+        )
+        integration_files.append(file_path.read_text(encoding="utf-8"))
+        integration_files.append(f"\n--- END FILE ---")
+
+    integration_files.append("\n\n--- END OF ATTACHED FILES ---")
+    return integration_files
+
+
 def get_args() -> tuple:
     """
     Get command line arguments.
@@ -238,9 +258,9 @@ def main(token: str, args) -> None:
     rules_to_check = {}
     for quality_scale, rules in rules.items():
         for rule in rules:
-            # Not focused on docs rules
             if rule.startswith(IGNORED_RULES):
                 continue
+
             info = rules_report[rule]
 
             if info["status"] != "todo" and not args.include_done:
@@ -272,21 +292,7 @@ def main(token: str, args) -> None:
         return
 
     client = genai.Client(api_key=token)
-
-    # Load all files for the integration
-    integration_files = ["--- START OF ATTACHED FILES ---"]
-    for file_path in integration_path.rglob("*"):
-        if "__pycache__" in file_path.parts or not file_path.is_file():
-            continue
-
-        integration_files.append(
-            f"\n\n--- FILE: {file_path.relative_to(integration_path)} ---\n\n"
-        )
-        integration_files.append(file_path.read_text(encoding="utf-8"))
-        integration_files.append(f"\n--- END FILE ---")
-
-    integration_files.append("\n\n--- END OF ATTACHED FILES ---")
-
+    integration_files = get_integration_files_for_prompt(integration_path)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for rule, report_path in rules_to_check.items():
