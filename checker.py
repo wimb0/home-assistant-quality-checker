@@ -112,7 +112,10 @@ IGNORED_RULES = (
     # Has to verify brands repo
     "brands",
     # Has to verify PyPI
-    "dependency-transparency"
+    "dependency-transparency",
+    # Has to verify tests
+    "config-flow-test-coverage",
+    "test-coverage",
 )
 
 
