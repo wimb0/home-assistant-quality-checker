@@ -25,3 +25,7 @@ By default it will not generate reports that are already generated. Set `--force
 ## --dry-run
 
 Set `--dry-run` to only print the rules that would be checked, without actually checking them. This is useful for testing and debugging.
+
+## --include-done
+
+Set `--include-done` to generate reports for rules that are already marked done.

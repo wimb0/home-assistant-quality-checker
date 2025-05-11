@@ -182,6 +182,11 @@ def get_args() -> tuple:
         help="Do not generate reports.",
         action="store_true",
     )
+    parser.add_argument(
+        "--include-done",
+        help="Generate reports for rules marked done or exempt.",
+        action="store_true",
+    )
     return parser.parse_args()
 
 
@@ -237,7 +242,8 @@ def main(token: str, args) -> None:
             if rule.startswith(IGNORED_RULES):
                 continue
             info = rules_report[rule]
-            if info["status"] != "todo":
+
+            if info["status"] != "todo" and not args.include_done:
                 continue
 
             report_path = output_dir / f"{rule}.md"
