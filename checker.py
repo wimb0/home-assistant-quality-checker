@@ -1,0 +1,279 @@
+# /// script
+# requires-python = ">=3.13"
+# dependencies = [
+#     "google-genai==1.7.0",
+#     "pyyaml",
+#     "requests",
+# ]
+# ///
+"""Check quality scale for an integration."""
+
+import datetime
+import logging
+import json
+import ast
+import sys
+import yaml
+from pathlib import Path
+
+from google import genai
+import requests
+
+# Setting up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+QUALITY_SCALE_RULE_RAW_URL = "https://raw.githubusercontent.com/home-assistant/developers.home-assistant/refs/heads/master/docs/core/integration-quality-scale/rules/{}.md"
+QUALITY_SCALE_RULE_DOCS_URL = "https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/{}"
+DOCS_URL = "https://www.home-assistant.io/integrations/{}/"
+
+SCRIPT_DIR = Path(__file__).parent
+OUTPUT_DIR = SCRIPT_DIR / "generated"
+
+RULE_REVIEW_PROMPT = """
+You are an expert Home Assistant code reviewer specializing in the Integration Quality Scale. Your task is to meticulously analyze a given Home Assistant integration's code against a specific quality scale rule.
+
+**Goal:**
+Generate a Markdown report assessing if the `{integration}` follows the rule `{rule}`.
+
+**Input You Will Receive:**
+1.  `{integration}`: The name of the integration.
+2.  `{rule}`: The name of the rule being checked.
+3.  `{rule_url}`: The URL for the official documentation of the rule.
+4.  `{rule_content}`: The full text and requirements of the rule.
+5.  The relevant code for the `{integration}` (will be provided by the user after this prompt).
+
+**Output Requirements:**
+
+The report must be in Markdown format and determine one of three statuses:
+*   **"todo"**: The rule applies to this integration, AND the integration currently does NOT follow it.
+*   **"done"**: The rule applies to this integration, AND the integration fully follows it.
+*   **"exempt"**: The rule does NOT apply to this integration.
+
+**Report Structure:**
+
+1.  **Title:**
+    ```markdown
+    # {integration}: {rule}
+    ```
+
+2.  **Information Table:**
+    ```markdown
+    | Info   | Value                                                                    |
+    |--------|--------------------------------------------------------------------------|
+    | Name   | [{integration}](https://www.home-assistant.io/integrations/{integration}/) |
+    | Rule   | [{rule}]({rule_url})                                                     |
+    | Status | **todo** OR **done** OR **exempt**                                       |
+    | Reason | (Only include if Status is "exempt". Explain why the rule does not apply.) |
+    ```
+
+3.  **Overview Section:**
+    *   **Heading:** `## Overview`
+    *   **Content:**
+        *   Start by clearly stating if the rule applies to the integration and why.
+        *   If it applies, explain in detail whether the integration follows the rule or not.
+        *   **Crucially, reference specific parts of the provided code or identify missing components/patterns to justify your assessment.**
+        *   If the rule does not apply (status "exempt"), expand on the "Reason" from the table, providing more context if necessary.
+
+4.  **Suggestions Section (Conditional):**
+    *   **Heading:** `## Suggestions`
+    *   **Content:**
+        *   **Only include this section if the Status is "todo".**
+        *   Provide clear, actionable, and specific steps the developer can take to make the integration compliant with the rule.
+        *   If possible, include examples of code changes or additions.
+        *   Explain *why* these changes would satisfy the rule.
+        *   If Status is "done" or "exempt", omit this entire section or state "No suggestions needed."
+
+**Analysis Process for You (the AI):**
+
+1.  **Understand the Rule:** Carefully read and interpret `{rule_content}` to understand its purpose, requirements, and scope.
+2.  **Applicability Check:** Based on `{rule_content}` and your knowledge of Home Assistant integrations, determine if this specific rule is relevant and applicable to the provided `{integration}` code.
+3.  **Code Review (if applicable):** If the rule applies, thoroughly examine the provided integration code.
+    *   Look for specific patterns, functions, configurations, or architectural choices mentioned or implied by the rule.
+    *   Identify if the integration implements these requirements correctly.
+    *   Note any deviations, omissions, or incorrect implementations.
+4.  **Determine Status:** Based on your analysis, assign "todo", "done", or "exempt".
+5.  **Formulate Report:** Construct the report according to the specified structure, ensuring your reasoning is clear, evidence-based (referencing code), and constructive.
+
+**Rule Content:**
+{rule_content}
+
+
+**Integration Code:**
+(You will analyze the code provided here)
+"""
+
+
+def get_quality_scale_rules(core_path: Path) -> dict[str, list[str]]:
+    """
+    Get quality scale rules from the core repository.
+    """
+    rules_file = core_path / "script" / "hassfest" / "quality_scale.py"
+    module = ast.parse(rules_file.read_text(encoding="utf-8"))
+    rules = {
+        "BRONZE": [],
+        "SILVER": [],
+        "GOLD": [],
+        "PLATINUM": [],
+    }
+    for node in module.body:
+        if not isinstance(node, ast.Assign) or node.targets[0].id != "ALL_RULES":
+            continue
+
+        for rule in node.value.elts:
+            if not isinstance(rule, ast.Call) or rule.func.id != "Rule":
+                continue
+
+            rule_name = rule.args[0].value
+            rule_tier = rule.args[1].attr
+            rules[rule_tier].append(rule_name)
+
+        break
+    return rules
+
+
+def get_args() -> tuple:
+    """
+    Get command line arguments.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Check quality scale for an integration."
+    )
+    parser.add_argument(
+        "integration",
+        help="The integration to check.",
+        type=str,
+    )
+    parser.add_argument(
+        "--core-path",
+        help="Path to Home Assistant core.",
+        type=str,
+        default="../core",
+    )
+    return parser.parse_args()
+
+
+def main(token: str, args) -> None:
+    """
+    Main function to run the script.
+    """
+    core_path = Path(args.core_path).resolve()
+
+    if not core_path.is_dir():
+        logger.error(f"Core path {core_path} does not exist.")
+        sys.exit(1)
+
+    integration_path = core_path / "homeassistant" / "components" / args.integration
+
+    if not integration_path.is_dir():
+        logger.error(f"Integration path {integration_path} does not exist.")
+        sys.exit(1)
+
+    rules = get_quality_scale_rules(core_path)
+
+    manifest = json.loads(
+        (integration_path / "manifest.json").read_text(encoding="utf-8")
+    )
+    integration_quality_scale = manifest.get("quality_scale", "unknown").upper()
+    if (
+        integration_quality_scale != "UNKNOWN"
+        and integration_quality_scale not in rules
+    ):
+        logger.error(
+            f"Integration quality scale {integration_quality_scale} is not supported."
+        )
+        sys.exit(1)
+
+    rules_report_path = integration_path / "quality_scale.yaml"
+    if rules_report_path.exists():
+        with open(rules_report_path, "r", encoding="utf-8") as file:
+            rules_report = {
+                rule: {"status": info} if isinstance(info, str) else info
+                for rule, info in yaml.safe_load(file)["rules"].items()
+            }
+    else:
+        # Create stub report
+        rules_report = {
+            rule: {"status": "todo"} for scale in rules for rule in rules[scale]
+        }
+
+    rules_to_check = []
+    for _quality_scale, rules in rules.items():
+        for rule in rules:
+            # Not focused on docs rules
+            if rule.startswith("docs-") or rule in {"brands"}:
+                continue
+            info = rules_report[rule]
+            if info["status"] == "todo":
+                rules_to_check.append(rule)
+
+        if rules_to_check:
+            break
+
+    print("Generating report for rules:")
+    for rule in rules_to_check:
+        print(f"  {rule}")
+    print()
+
+    client = genai.Client(api_key=token)
+
+    # Load all files for the integration
+    integration_files = ["--- START OF ATTACHED FILES ---"]
+    for file_path in integration_path.rglob("*"):
+        if "__pycache__" in file_path.parts or not file_path.is_file():
+            continue
+
+        integration_files.append(f"\n\n--- FILE: {file_path.relative_to(integration_path)} ---\n\n")
+        integration_files.append(file_path.read_text(encoding="utf-8"))
+        integration_files.append(f"\n--- END FILE ---")
+
+    integration_files.append("\n\n--- END OF ATTACHED FILES ---")
+
+    output_dir = OUTPUT_DIR / args.integration
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for rule in rules_to_check:
+        report_path = output_dir / f"{rule}.md"
+
+        if report_path.exists():
+            print(f"Report for {rule} already exists. Skipping.")
+            continue
+
+        response = client.models.generate_content(
+            model="gemini-2.5-pro-exp-03-25",
+            contents=[
+                RULE_REVIEW_PROMPT.format(
+                    integration=args.integration,
+                    rule=rule,
+                    rule_url=QUALITY_SCALE_RULE_DOCS_URL.format(rule),
+                    rule_content=requests.get(QUALITY_SCALE_RULE_RAW_URL.format(rule)).text,
+                ),
+                *integration_files,
+            ],
+        )
+
+        report = response.text
+        report += """
+
+_Created at {datetime}. Prompt tokens: {prompt_tokens}, Output tokens: {output_tokens}, Total tokens: {total_tokens}_
+""".format(
+            datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            prompt_tokens=response.usage_metadata.prompt_token_count,
+            output_tokens=response.usage_metadata.candidates_token_count,
+            total_tokens=response.usage_metadata.total_token_count,
+        )
+
+        report_path.write_text(report, encoding="utf-8")
+        print(f"Report for {rule} generated at {report_path.relative_to(SCRIPT_DIR)}")
+
+
+if __name__ == "__main__":
+    token_path = Path(".token")
+    if not token_path.exists():
+        print("No token file found. Please create a .token file with your API key.")
+        sys.exit(1)
+    token = token_path.read_text(encoding="utf-8").strip()
+    main(token, get_args())
