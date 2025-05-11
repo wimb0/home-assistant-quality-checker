@@ -256,6 +256,7 @@ def main(token: str, args) -> None:
 
         if report_path.exists():
             print(f"Report for {rule} already exists. Skipping.")
+            print()
             continue
 
         response = client.models.generate_content(
@@ -286,6 +287,7 @@ _Created at {datetime}. Prompt tokens: {prompt_tokens}, Output tokens: {output_t
 
         report_path.write_text(report, encoding="utf-8")
         print(f"Report for {rule} generated at {report_path.relative_to(SCRIPT_DIR)}")
+        print()
 
 
 if __name__ == "__main__":
