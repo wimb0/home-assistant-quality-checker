@@ -167,6 +167,21 @@ def get_args() -> tuple:
         type=str,
         default="../core",
     )
+    parser.add_argument(
+        "--target-scale",
+        help="Quality scale to target.",
+        choices=["bronze", "silver", "gold", "platinum"],
+    )
+    parser.add_argument(
+        "--force-update",
+        help="Will also update existing reports.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--dry-run",
+        help="Do not generate reports.",
+        action="store_true",
+    )
     return parser.parse_args()
 
 
@@ -193,7 +208,7 @@ def main(token: str, args) -> None:
     )
     integration_quality_scale = manifest.get("quality_scale", "unknown").upper()
     if (
-        integration_quality_scale != "UNKNOWN"
+        integration_quality_scale not in ("LEGACY", "UNKNOWN")
         and integration_quality_scale not in rules
     ):
         logger.error(
@@ -201,36 +216,54 @@ def main(token: str, args) -> None:
         )
         sys.exit(1)
 
+    rules_report = {
+        rule: {"status": "todo"} for scale in rules for rule in rules[scale]
+    }
     rules_report_path = integration_path / "quality_scale.yaml"
     if rules_report_path.exists():
         with open(rules_report_path, "r", encoding="utf-8") as file:
-            rules_report = {
-                rule: {"status": info} if isinstance(info, str) else info
-                for rule, info in yaml.safe_load(file)["rules"].items()
-            }
-    else:
-        # Create stub report
-        rules_report = {
-            rule: {"status": "todo"} for scale in rules for rule in rules[scale]
-        }
+            rules_report.update(
+                {
+                    rule: {"status": info} if isinstance(info, str) else info
+                    for rule, info in yaml.safe_load(file)["rules"].items()
+                }
+            )
 
-    rules_to_check = []
-    for _quality_scale, rules in rules.items():
+    output_dir = OUTPUT_DIR / args.integration
+    rules_to_check = {}
+    for quality_scale, rules in rules.items():
         for rule in rules:
             # Not focused on docs rules
             if rule.startswith(IGNORED_RULES):
                 continue
             info = rules_report[rule]
-            if info["status"] == "todo":
-                rules_to_check.append(rule)
+            if info["status"] != "todo":
+                continue
 
-        if rules_to_check:
+            report_path = output_dir / f"{rule}.md"
+
+            if report_path.exists() and not args.force_update:
+                print(f"Report for {rule} already exists. Skipping.")
+                print()
+                continue
+
+            rules_to_check[rule] = report_path
+
+        # Stop if we reached the target scale or found some rules to check
+        # in the current scale
+        if args.target_scale:
+            if quality_scale == args.target_scale.upper():
+                break
+        elif rules_to_check:
             break
 
     print("Generating report for rules:")
     for rule in rules_to_check:
         print(f"  {rule}")
     print()
+
+    if args.dry_run:
+        return
 
     client = genai.Client(api_key=token)
 
@@ -248,17 +281,9 @@ def main(token: str, args) -> None:
 
     integration_files.append("\n\n--- END OF ATTACHED FILES ---")
 
-    output_dir = OUTPUT_DIR / args.integration
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for rule in rules_to_check:
-        report_path = output_dir / f"{rule}.md"
-
-        if report_path.exists():
-            print(f"Report for {rule} already exists. Skipping.")
-            print()
-            continue
-
+    for rule, report_path in rules_to_check.items():
         response = client.models.generate_content(
             model="gemini-2.5-pro-exp-03-25",
             contents=[
