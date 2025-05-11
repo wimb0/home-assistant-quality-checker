@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 
 QUALITY_SCALE_RULE_RAW_URL = "https://raw.githubusercontent.com/home-assistant/developers.home-assistant/refs/heads/master/docs/core/integration-quality-scale/rules/{}.md"
-QUALITY_SCALE_RULE_DOCS_URL = "https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/{}"
+QUALITY_SCALE_RULE_DOCS_URL = (
+    "https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/{}"
+)
 DOCS_URL = "https://www.home-assistant.io/integrations/{}/"
 
 SCRIPT_DIR = Path(__file__).parent
@@ -103,6 +105,15 @@ The report must be in Markdown format and determine one of three statuses:
 **Integration Code:**
 (You will analyze the code provided here)
 """
+
+IGNORED_RULES = (
+    # Has to verify docs repo
+    "docs-",
+    # Has to verify brands repo
+    "brands",
+    # Has to verify PyPI
+    "dependency-transparency"
+)
 
 
 def get_quality_scale_rules(core_path: Path) -> dict[str, list[str]]:
@@ -204,7 +215,7 @@ def main(token: str, args) -> None:
     for _quality_scale, rules in rules.items():
         for rule in rules:
             # Not focused on docs rules
-            if rule.startswith("docs-") or rule in {"brands"}:
+            if rule.startswith(IGNORED_RULES):
                 continue
             info = rules_report[rule]
             if info["status"] == "todo":
@@ -226,7 +237,9 @@ def main(token: str, args) -> None:
         if "__pycache__" in file_path.parts or not file_path.is_file():
             continue
 
-        integration_files.append(f"\n\n--- FILE: {file_path.relative_to(integration_path)} ---\n\n")
+        integration_files.append(
+            f"\n\n--- FILE: {file_path.relative_to(integration_path)} ---\n\n"
+        )
         integration_files.append(file_path.read_text(encoding="utf-8"))
         integration_files.append(f"\n--- END FILE ---")
 
@@ -249,7 +262,9 @@ def main(token: str, args) -> None:
                     integration=args.integration,
                     rule=rule,
                     rule_url=QUALITY_SCALE_RULE_DOCS_URL.format(rule),
-                    rule_content=requests.get(QUALITY_SCALE_RULE_RAW_URL.format(rule)).text,
+                    rule_content=requests.get(
+                        QUALITY_SCALE_RULE_RAW_URL.format(rule)
+                    ).text,
                 ),
                 *integration_files,
             ],
