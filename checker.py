@@ -40,11 +40,10 @@ You are an expert Home Assistant code reviewer specializing in the Integration Q
 Generate a Markdown report assessing if the `{integration}` follows the rule `{rule}`.
 
 **Input You Will Receive:**
-1.  `{integration}`: The name of the integration.
-2.  `{rule}`: The name of the rule being checked.
-3.  `{rule_url}`: The URL for the official documentation of the rule.
-4.  `{rule_content}`: The full text and requirements of the rule.
-5.  The relevant code for the `{integration}` (will be provided by the user after this prompt).
+1.  The name of the integration: {integration}.
+2.  The name of the rule being checked: {rule}.
+3.  The full text and requirements of the rule.
+4.  The relevant code for the integration
 
 **Output Requirements:**
 
