@@ -43,7 +43,7 @@ Generate a Markdown report assessing if the `{integration}` follows the rule `{r
 1.  The name of the integration: {integration}.
 2.  The name of the rule being checked: {rule}.
 3.  The full text and requirements of the rule.
-4.  The relevant code for the integration
+4.  The code for the integration
 
 **Output Requirements:**
 
@@ -88,8 +88,8 @@ The report must be in Markdown format and determine one of three statuses:
 
 **Analysis Process for You (the AI):**
 
-1.  **Understand the Rule:** Carefully read and interpret `{rule_content}` to understand its purpose, requirements, and scope.
-2.  **Applicability Check:** Based on `{rule_content}` and your knowledge of Home Assistant integrations, determine if this specific rule is relevant and applicable to the provided `{integration}` code.
+1.  **Understand the Rule:** Carefully read and interpret rule content to understand its purpose, requirements, and scope.
+2.  **Applicability Check:** Based on rule content and your knowledge of Home Assistant integrations, determine if this specific rule is relevant and applicable to the provided `{integration}` code.
 3.  **Code Review (if applicable):** If the rule applies, thoroughly examine the provided integration code.
     *   Look for specific patterns, functions, configurations, or architectural choices mentioned or implied by the rule.
     *   Identify if the integration implements these requirements correctly.
