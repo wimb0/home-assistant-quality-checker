@@ -97,13 +97,16 @@ The report must be in Markdown format and determine one of three statuses:
 4.  **Determine Status:** Based on your analysis, assign "todo", "done", or "exempt".
 5.  **Formulate Report:** Construct the report according to the specified structure, ensuring your reasoning is clear, evidence-based (referencing code), and constructive.
 
-**Rule Content:**
+--- START OF ATTACHED FILES ---
+
+--- FILE: rule-{rule}-description.md ---
 {rule_content}
+--- END FILE ---
 
+{files}
 
-**Integration Code:**
-(You will analyze the code provided here)
-"""
+--- END OF ATTACHED FILES ---
+""".strip()
 
 IGNORED_RULES = (
     # Has to verify docs repo
@@ -146,13 +149,30 @@ def get_quality_scale_rules(core_path: Path) -> dict[str, list[str]]:
     return rules
 
 
-def get_integration_files_for_prompt(integration_path: Path) -> list[str]:
+def get_integration_files_for_prompt(integration_path: Path) -> str:
     """
     Get all files for the integration to be used in the prompt.
     """
     name = integration_path.name
-    integration_files = ["--- START OF ATTACHED FILES ---"]
-    for file_path in integration_path.rglob("*"):
+    integration_files = []
+    priority_extensions = {
+        "manifest.json": 1,
+        "__init__.py": 2,
+        ".py": 5,
+        ".yaml": 8,
+        ".json": 10,
+    }
+    for file_path in sorted(
+        integration_path.rglob("*"),
+        key=lambda x: (
+            # Try by name first
+            priority_extensions.get(
+                x.name,
+                # Then by extension
+                priority_extensions.get(x.suffix, 0),
+            ),
+        ),
+    ):
         if "__pycache__" in file_path.parts or not file_path.is_file():
             continue
 
@@ -162,8 +182,7 @@ def get_integration_files_for_prompt(integration_path: Path) -> list[str]:
         integration_files.append(file_path.read_text(encoding="utf-8"))
         integration_files.append(f"\n--- END FILE ---")
 
-    integration_files.append("\n\n--- END OF ATTACHED FILES ---")
-    return integration_files
+    return "".join(integration_files).strip()
 
 
 def get_args() -> tuple:
@@ -297,17 +316,13 @@ def main(token: str, args) -> None:
     for rule, report_path in rules_to_check.items():
         response = client.models.generate_content(
             model="gemini-2.5-pro-exp-03-25",
-            contents=[
-                RULE_REVIEW_PROMPT.format(
-                    integration=args.integration,
-                    rule=rule,
-                    rule_url=QUALITY_SCALE_RULE_DOCS_URL.format(rule),
-                    rule_content=requests.get(
-                        QUALITY_SCALE_RULE_RAW_URL.format(rule)
-                    ).text,
-                ),
-                *integration_files,
-            ],
+            contents=RULE_REVIEW_PROMPT.format(
+                integration=args.integration,
+                rule=rule,
+                rule_url=QUALITY_SCALE_RULE_DOCS_URL.format(rule),
+                rule_content=requests.get(QUALITY_SCALE_RULE_RAW_URL.format(rule)).text,
+                files=integration_files,
+            ),
         )
 
         report = response.text

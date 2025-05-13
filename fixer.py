@@ -34,7 +34,7 @@ GENERATE_PATCH_PROMPT = """
 You are an expert Home Assistant Python code assistant. Your primary function is to generate code patches based on quality rule violations.
 
 **Objective:**
-Generate a patch file to address specific issues found in a Home Assistant integration. These issues are violations of a defined quality scale rule.
+Generate a patch file to address specific issues found in the Home Assistant integration "{integration}". These issues are violations of the quality scale rule {rule}.
 
 **Instructions:**
 1.  Analyze the provided **Rule Definition** and the **Violation Report**.
@@ -53,18 +53,20 @@ Generate a patch file to address specific issues found in a Home Assistant integ
 **2. The Rule Name/ID:**
 {rule}
 
-**3. The Rule Definition:**
+--- START OF ATTACHED FILES ---
+
+--- FILE: rule-{rule}-description.md ---
 {rule_content}
+--- END FILE ---
 
-**4. The Violation Report:**
-This report details how the integration fails to comply with the rule mentioned above.
+--- FILE: rule-{rule}-report.md ---
 {report_content}
+--- END FILE ---
 
-**5. Integration Code Files:**
-The following are the files from the Home Assistant integration. The content of each file is provided, clearly demarcated.
+{files}
 
-
-"""
+--- END OF ATTACHED FILES ---
+""".strip()
 
 
 def get_args() -> tuple:
@@ -122,17 +124,15 @@ def main(token: str, args) -> None:
 
     response = client.models.generate_content(
         model="gemini-2.5-pro-exp-03-25",
-        contents=[
-            GENERATE_PATCH_PROMPT.format(
-                integration=args.integration,
-                rule=args.rule,
-                rule_content=requests.get(
-                    QUALITY_SCALE_RULE_RAW_URL.format(args.rule)
-                ).text,
-                report_content=report_path.read_text(encoding="utf-8"),
-            ),
-            *integration_files,
-        ],
+        contents=GENERATE_PATCH_PROMPT.format(
+            integration=args.integration,
+            rule=args.rule,
+            rule_content=requests.get(
+                QUALITY_SCALE_RULE_RAW_URL.format(args.rule)
+            ).text,
+            report_content=report_path.read_text(encoding="utf-8"),
+            files=integration_files,
+        ),
     )
 
     diff_path = OUTPUT_DIR / args.integration / f"{args.rule}.diff"
