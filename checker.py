@@ -306,23 +306,28 @@ def main(token: str, args) -> None:
         print(f"  {rule}")
     print()
 
-    if args.dry_run:
-        return
-
-    client = genai.Client(api_key=token)
     integration_files = get_integration_files_for_prompt(integration_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    for rule, report_path in rules_to_check.items():
-        response = client.models.generate_content(
-            model="gemini-2.5-pro-exp-03-25",
-            contents=RULE_REVIEW_PROMPT.format(
+    prompt = RULE_REVIEW_PROMPT.format(
                 integration=args.integration,
                 rule=rule,
                 rule_url=QUALITY_SCALE_RULE_DOCS_URL.format(rule),
                 rule_content=requests.get(QUALITY_SCALE_RULE_RAW_URL.format(rule)).text,
                 files=integration_files,
-            ),
+            )
+
+    if args.dry_run:
+        print("Dry run enabled. Not generating reports.")
+        print()
+        print(f"Prompt token estimate: {len(prompt.split())}")
+        return
+
+    client = genai.Client(api_key=token)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for rule, report_path in rules_to_check.items():
+        response = client.models.generate_content(
+            model="gemini-2.5-pro-exp-03-25",
+            contents=prompt,
         )
 
         report = response.text
