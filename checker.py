@@ -332,15 +332,15 @@ def main(token: str, args) -> None:
     print()
 
     integration_files = get_integration_files_for_prompt(integration_path)
-    prompt = RULE_REVIEW_PROMPT.format(
-                integration=args.integration,
-                rule=rule,
-                rule_url=QUALITY_SCALE_RULE_DOCS_URL.format(rule),
-                rule_content=requests.get(QUALITY_SCALE_RULE_RAW_URL.format(rule)).text,
-                files=integration_files,
-            )
 
     if args.dry_run:
+        prompt = RULE_REVIEW_PROMPT.format(
+            integration=args.integration,
+            rule=rule,
+            rule_url=QUALITY_SCALE_RULE_DOCS_URL.format(rule),
+            rule_content=requests.get(QUALITY_SCALE_RULE_RAW_URL.format(rule)).text,
+            files=integration_files,
+        )
         print("Dry run enabled. Not generating reports.")
         print(f"Prompt token estimate: {estimate_tokens(prompt)}")
         return
@@ -353,7 +353,13 @@ def main(token: str, args) -> None:
     for rule, report_path in rules_to_check.items():
         response = client.models.generate_content(
             model=model,
-            contents=prompt,
+            contents=RULE_REVIEW_PROMPT.format(
+                integration=args.integration,
+                rule=rule,
+                rule_url=QUALITY_SCALE_RULE_DOCS_URL.format(rule),
+                rule_content=requests.get(QUALITY_SCALE_RULE_RAW_URL.format(rule)).text,
+                files=integration_files,
+            ),
         )
 
         report = response.text
