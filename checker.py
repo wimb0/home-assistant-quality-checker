@@ -351,6 +351,7 @@ def main(token: str, args) -> None:
     model = FREE_MODEL if args.free_model else PAID_MODEL
 
     for rule, report_path in rules_to_check.items():
+        start_time = datetime.datetime.now()
         response = client.models.generate_content(
             model=model,
             contents=RULE_REVIEW_PROMPT.format(
@@ -373,8 +374,11 @@ _Created at {datetime}. Prompt tokens: {prompt_tokens}, Output tokens: {output_t
             total_tokens=response.usage_metadata.total_token_count,
         )
 
+        end_time = datetime.datetime.now()
+        duration = end_time - start_time
+
         report_path.write_text(report, encoding="utf-8")
-        print(f"Report for {rule} generated at {report_path.relative_to(SCRIPT_DIR)}")
+        print(f"Report for {rule} generated at {report_path.relative_to(SCRIPT_DIR)} (took {duration.total_seconds():.1f}s)")
         print()
         if args.single_rule:
             break
