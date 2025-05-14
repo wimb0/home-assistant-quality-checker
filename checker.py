@@ -23,7 +23,8 @@ import requests
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
+FREE_MODEL = "gemini-2.5-flash-preview-04-17"
+PAID_MODEL = "gemini-2.5-pro-preview-05-06"
 QUALITY_SCALE_RULE_RAW_URL = "https://raw.githubusercontent.com/home-assistant/developers.home-assistant/refs/heads/master/docs/core/integration-quality-scale/rules/{}.md"
 QUALITY_SCALE_RULE_DOCS_URL = (
     "https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/{}"
@@ -221,6 +222,11 @@ def get_args() -> tuple:
         action="store_true",
     )
     parser.add_argument(
+        "--free-model",
+        help="Use less powered but free model.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--include-done",
         help="Generate reports for rules marked done or exempt.",
         action="store_true",
@@ -324,9 +330,11 @@ def main(token: str, args) -> None:
     client = genai.Client(api_key=token)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    model = FREE_MODEL if args.free_model else PAID_MODEL
+
     for rule, report_path in rules_to_check.items():
         response = client.models.generate_content(
-            model="gemini-2.5-pro-exp-03-25",
+            model=model,
             contents=prompt,
         )
 

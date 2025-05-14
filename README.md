@@ -2,7 +2,7 @@
 
 Check the quality scale of a Home Assistant integration.
 
-The scrips use the Google Gemini API. Create a file `.token` that contains your Google Gemini API key. You can [create one here.](https://aistudio.google.com/apikey)
+The scrips use the Google Gemini API. Create a file `.token` that contains your Google Gemini API key. You can [create one here.](https://aistudio.google.com/apikey).
 
 # checker.py
 
@@ -19,6 +19,10 @@ By default it assumes that the Home Assistant core repository exists as `../core
 ## --target-scale
 
 By default it will stop checking rules for the first integration quality scale level that has rules left to be done. Set `--target-scale silver` to check all rules for the silver level and below.
+
+## --free
+
+The configured model is set to a paid model and requires billing to be enabled. Add `--free` to the command line to use a free model. Quality will be lower.
 
 ## --force-update
 
