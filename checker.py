@@ -231,6 +231,11 @@ def get_args() -> tuple:
         help="Generate reports for rules marked done or exempt.",
         action="store_true",
     )
+    parser.add_argument(
+        "--single-rule",
+        help="Only run the first applicable rule.",
+        action="store_true",
+    )
     return parser.parse_args()
 
 
@@ -280,6 +285,7 @@ def main(token: str, args) -> None:
 
     output_dir = OUTPUT_DIR / args.integration
     rules_to_check = {}
+    printed_something = False
     for quality_scale, rules in rules.items():
         for rule in rules:
             if rule.startswith(IGNORED_RULES):
@@ -294,7 +300,7 @@ def main(token: str, args) -> None:
 
             if report_path.exists() and not args.force_update:
                 print(f"Report for {rule} already exists. Skipping.")
-                print()
+                printed_something = True
                 continue
 
             rules_to_check[rule] = report_path
@@ -307,9 +313,14 @@ def main(token: str, args) -> None:
         elif rules_to_check:
             break
 
+    if printed_something:
+        print()
     print("Generating report for rules:")
-    for rule in rules_to_check:
+    for idx, rule in enumerate(rules_to_check):
         print(f"  {rule}")
+        if idx == 0 and args.single_rule:
+            print()
+            print("Ignoring next rules due to --single-rule flag:")
     print()
 
     integration_files = get_integration_files_for_prompt(integration_path)
@@ -323,7 +334,6 @@ def main(token: str, args) -> None:
 
     if args.dry_run:
         print("Dry run enabled. Not generating reports.")
-        print()
         print(f"Prompt token estimate: {len(prompt.split())}")
         return
 
@@ -352,6 +362,8 @@ _Created at {datetime}. Prompt tokens: {prompt_tokens}, Output tokens: {output_t
         report_path.write_text(report, encoding="utf-8")
         print(f"Report for {rule} generated at {report_path.relative_to(SCRIPT_DIR)}")
         print()
+        if args.single_rule:
+            break
 
 
 if __name__ == "__main__":

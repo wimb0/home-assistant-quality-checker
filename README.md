@@ -24,6 +24,10 @@ By default it will stop checking rules for the first integration quality scale l
 
 The configured model is set to a paid model and requires billing to be enabled. Add `--free` to the command line to use a free model. Quality will be lower.
 
+## --single-rule
+
+Only run a single rule. This is useful for testing and debugging.
+
 ## --force-update
 
 By default it will not generate reports that are already generated. Set `--force-update` to force the generation of reports.
