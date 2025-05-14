@@ -4,6 +4,7 @@
 #     "google-genai==1.7.0",
 #     "pyyaml",
 #     "requests",
+#     "tiktoken",
 # ]
 # ///
 """Check quality scale for an integration."""
@@ -18,6 +19,7 @@ from pathlib import Path
 
 from google import genai
 import requests
+import tiktoken
 
 # Setting up logging
 logging.basicConfig(level=logging.INFO)
@@ -186,6 +188,12 @@ def get_integration_files_for_prompt(integration_path: Path) -> str:
     return "".join(integration_files).strip()
 
 
+def estimate_tokens(prompt: str, model: str = "gpt-4") -> int:
+    encoding = tiktoken.encoding_for_model(model)
+    tokens = encoding.encode(prompt)
+    return len(tokens)
+
+
 def get_args() -> tuple:
     """
     Get command line arguments.
@@ -334,7 +342,7 @@ def main(token: str, args) -> None:
 
     if args.dry_run:
         print("Dry run enabled. Not generating reports.")
-        print(f"Prompt token estimate: {len(prompt.split())}")
+        print(f"Prompt token estimate: {estimate_tokens(prompt)}")
         return
 
     client = genai.Client(api_key=token)
