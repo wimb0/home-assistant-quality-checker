@@ -2,7 +2,7 @@
 
 | Info   | Value                                                                    |
 |--------|--------------------------------------------------------------------------|
-| Name   | [open_epaper_link](https://www.home-assistant.io/integrations/open_epaper_link/) |
+| Name   | [open_epaper_link](https://github.com/OpenEPaperLink/Home_Assistant_Integration) |
 | Rule   | [devices](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/devices)                                                     |
 | Status | **todo**                                       |
 | Reason | The `DeviceInfo` for both the tags and the Access Point (AP) is not populated as completely as recommended by the rule's example, missing several fields that would enhance user experience. |

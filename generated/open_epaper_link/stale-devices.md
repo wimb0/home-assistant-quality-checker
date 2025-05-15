@@ -2,7 +2,7 @@
 
 | Info   | Value                                                                    |
 |--------|--------------------------------------------------------------------------|
-| Name   | [open_epaper_link](https://www.home-assistant.io/integrations/open_epaper_link/) |
+| Name   | [open_epaper_link](https://github.com/OpenEPaperLink/Home_Assistant_Integration) |
 | Rule   | [stale-devices](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/stale-devices)                                                     |
 | Status | **todo**                                                                 |
 | Reason | N/A                                                                      |
@@ -80,21 +80,21 @@ To make the `open_epaper_link` integration compliant with the `stale-devices` ru
     ) -> bool:
         """Allow manual removal of a device if it's no longer active."""
         hub: Hub = hass.data[DOMAIN][config_entry.entry_id]
-        
+
         device_mac = None
         for identifier in device_entry.identifiers:
             if identifier[0] == DOMAIN:
                 device_mac = identifier[1]
                 break
-        
+
         if not device_mac:
             # Should not happen for devices created by this integration
-            return False 
+            return False
 
         # Check against the hub's current list of known (non-blacklisted) tags.
         # hub.tags is a list of MAC addresses.
         is_known_and_active = any(known_mac.upper() == device_mac.upper() for known_mac in hub.tags)
-        
+
         # Allow removal if the device is not in the hub's current list of active tags.
         # If hub is offline, hub.tags might be stale, but this function is a user-initiated
         # action, often used when the system state is perceived as incorrect by the user.

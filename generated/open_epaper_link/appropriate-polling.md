@@ -2,7 +2,7 @@
 
 | Info   | Value                                                                    |
 |--------|--------------------------------------------------------------------------|
-| Name   | [open_epaper_link](https://www.home-assistant.io/integrations/open_epaper_link/) |
+| Name   | [open_epaper_link](https://github.com/OpenEPaperLink/Home_Assistant_Integration) |
 | Rule   | [appropriate-polling](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/appropriate-polling)                                                     |
 | Status | **exempt**                                       |
 | Reason | The integration is classified as `local_push` and primarily uses a WebSocket connection for receiving data updates from the device, not periodic polling for entity states. |

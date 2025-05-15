@@ -2,7 +2,7 @@
 
 | Info   | Value                                                                    |
 |--------|--------------------------------------------------------------------------|
-| Name   | [open_epaper_link](https://www.home-assistant.io/integrations/open_epaper_link/) |
+| Name   | [open_epaper_link](https://github.com/OpenEPaperLink/Home_Assistant_Integration) |
 | Rule   | [action-exceptions](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/action-exceptions)                                                     |
 | Status | **todo**                                                                 |
 | Reason |                                                                          |
@@ -201,8 +201,8 @@ To make the `open_epaper_link` integration compliant with the `action-exceptions
                     # load_stored_data might itself call _fetch_tag_types if store is empty/invalid
                     # This needs careful chaining of the is_forced_refresh flag or context.
                     # For simplicity, assume load_stored_data doesn't force a fetch that needs to raise.
-                    await self.load_stored_data() 
-                
+                    await self.load_stored_data()
+
                 # If still no types or cache expired or forced refresh
                 if not self._tag_types or forced_refresh or \
                    (datetime.now() - self._last_update > CACHE_DURATION):

@@ -2,7 +2,7 @@
 
 | Info   | Value                                                                    |
 |--------|--------------------------------------------------------------------------|
-| Name   | [open_epaper_link](https://www.home-assistant.io/integrations/open_epaper_link/) |
+| Name   | [open_epaper_link](https://github.com/OpenEPaperLink/Home_Assistant_Integration) |
 | Rule   | [log-when-unavailable](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/log-when-unavailable)                                                     |
 | Status | **todo**                                                                 |
 | Reason |                                                                          |
@@ -73,7 +73,7 @@ To make the `open_epaper_link` integration compliant with the `log-when-unavaila
             elif not self._connection_unavailable_logged: # If it was already offline (e.g., initial connect failed) and we haven't logged it yet
                 _LOGGER.info("Failed to connect to OpenEPaperLink AP at %s: %s. Will attempt to reconnect.", self.host, err)
                 self._connection_unavailable_logged = True
-            
+
             self.online = False
             async_dispatcher_send(self.hass, f"{DOMAIN}_connection_status", False)
             # _LOGGER.error(...) calls for these specific errors should be removed or changed if this INFO log covers them.
@@ -86,7 +86,7 @@ To make the `open_epaper_link` integration compliant with the `log-when-unavaila
             if self.online and not self._connection_unavailable_logged:
                 _LOGGER.info("OpenEPaperLink AP at %s is rebooting, connection will be lost. Will attempt to reconnect.", self.host)
                 self._connection_unavailable_logged = True
-            
+
             self._ap_data["ap_state"] = "Offline" # Or similar status update
             self.online = False
             async_dispatcher_send(self.hass, f"{DOMAIN}_connection_status", False)

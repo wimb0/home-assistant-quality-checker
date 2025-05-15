@@ -2,7 +2,7 @@
 
 | Info   | Value                                                                    |
 |--------|--------------------------------------------------------------------------|
-| Name   | [open_epaper_link](https://www.home-assistant.io/integrations/open_epaper_link/) |
+| Name   | [open_epaper_link](https://github.com/OpenEPaperLink/Home_Assistant_Integration) |
 | Rule   | [common-modules](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/common-modules)                                                     |
 | Status | **todo**                                                                 |
 | Reason |                                                                          |
@@ -77,9 +77,9 @@ To make the `open_epaper_link` integration compliant with the `common-modules` r
         # homeassistant/components/open_epaper_link/sensor.py
         # ...
         from homeassistant.helpers.typing import StateType
-        
+
         import logging
-        
+
         -from .const import DOMAIN
         -from .hub import Hub
         +# Assuming OpenEPaperLinkBaseSensor was defined in this file before
@@ -88,13 +88,13 @@ To make the `open_epaper_link` integration compliant with the `common-modules` r
         +from .const import DOMAIN
         +from .coordinator import Hub # If Hub was Hub, or its new name
         +from .entity import OpenEPaperLinkBaseSensor
-        
+
         # ...
-        
+
         -class OpenEPaperLinkBaseSensor(SensorEntity):
         -    """Base class for all OpenEPaperLink sensors."""
         -    # ...
-        
+
         class OpenEPaperLinkTagSensor(OpenEPaperLinkBaseSensor):
             # ...
         ```
@@ -121,35 +121,35 @@ To make the `open_epaper_link` integration compliant with the `common-modules` r
         ```diff
         # homeassistant/components/open_epaper_link/select.py
         from __future__ import annotations
-        
+
         -from homeassistant.components.select import SelectEntity
         from homeassistant.config_entries import ConfigEntry
         from homeassistant.core import HomeAssistant, callback
         from homeassistant.helpers.dispatcher import async_dispatcher_connect
         from homeassistant.helpers.entity import EntityCategory
         from homeassistant.helpers.entity_platform import AddEntitiesCallback
-        
+
         from .const import DOMAIN
         -from .util import set_ap_config_item
         +from .coordinator import Hub # Assuming Hub is the class in coordinator.py
         +from .util import set_ap_config_item # Keep this if used by specific select entities
         +from .entity import APConfigSelect, OptionMapping # Import base classes
-        
+
         import logging
-        
+
         _LOGGER = logging.getLogger(__name__)
-        
+
         -class OptionMapping:
         -    # ...
-        
+
         # CHANNEL_MAPPING, BRIGHTNESS_MAPPING, etc. constants remain here
-        
+
         -class APConfigSelect(SelectEntity):
         -    # ...
-        
+
         class APTimeHourSelect(APConfigSelect): # This now inherits from the imported APConfigSelect
             # ...
-        
+
         async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
             hub: Hub = hass.data[DOMAIN][entry.entry_id] # Ensure Hub type hint matches class from coordinator.py
             # ...

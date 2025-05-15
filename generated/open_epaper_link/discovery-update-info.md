@@ -2,7 +2,7 @@
 
 | Info   | Value                                                                    |
 |--------|--------------------------------------------------------------------------|
-| Name   | [open_epaper_link](https://www.home-assistant.io/integrations/open_epaper_link/) |
+| Name   | [open_epaper_link](https://github.com/OpenEPaperLink/Home_Assistant_Integration) |
 | Rule   | [discovery-update-info](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/discovery-update-info)                                                     |
 | Status | **exempt**                                       |
 | Reason | The integration does not discover the OpenEPaperLink Access Point (AP) via network discovery methods like mDNS, SSDP, or DHCP. The AP's IP address is manually configured by the user. Therefore, the rule's requirement to update network information based on discovery data does not apply, as per the rule's exception: "Integrations where the devices can't be discovered are exempt from this rule." |

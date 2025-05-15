@@ -2,7 +2,7 @@
 
 | Info   | Value                                                                    |
 |--------|--------------------------------------------------------------------------|
-| Name   | [open_epaper_link](https://www.home-assistant.io/integrations/open_epaper_link/) |
+| Name   | [open_epaper_link](https://github.com/OpenEPaperLink/Home_Assistant_Integration) |
 | Rule   | [reconfiguration-flow](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/reconfiguration-flow)                                                     |
 | Status | **exempt**                                       |
 | Reason | The only configuration item in `ConfigEntry.data` (`CONF_HOST`) is also the integration's `unique_id`. Since `unique_id` is immutable after entry creation, this setting cannot be changed via a reconfigure flow. There are no other reconfigurable items in `ConfigEntry.data`. |

@@ -2,7 +2,7 @@
 
 | Info   | Value                                                                    |
 |--------|--------------------------------------------------------------------------|
-| Name   | [open_epaper_link](https://www.home-assistant.io/integrations/open_epaper_link/) |
+| Name   | [open_epaper_link](https://github.com/OpenEPaperLink/Home_Assistant_Integration) |
 | Rule   | [discovery](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/discovery)                                                     |
 | Status | **todo**                                       |
 | Reason |                                                                          |
@@ -51,13 +51,13 @@ Currently, the integration does not implement any discovery mechanisms:
 
         if user_input is not None:
             # _validate_input uses the provided host
-            info, error_tuple_part = await self._validate_input(user_input[CONF_HOST]) 
-            # In the actual code, _validate_input returns (dict, error_string), 
+            info, error_tuple_part = await self._validate_input(user_input[CONF_HOST])
+            # In the actual code, _validate_input returns (dict, error_string),
             # this is simplified for brevity.
             error = error_tuple_part # Assuming error_tuple_part is the error string
             if not error:
                 # Current unique_id is set to the host IP, which is not stable
-                await self.async_set_unique_id(self._host) 
+                await self.async_set_unique_id(self._host)
                 self._abort_if_unique_id_configured()
 
                 return self.async_create_entry(
