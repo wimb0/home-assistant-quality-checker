@@ -16,6 +16,10 @@ uv run checker.py wled
 
 By default it assumes that the Home Assistant core repository exists as `../core`. If that is not the case, specify it by adding `--core-path` to the command line.
 
+## --integration-path
+
+Specify the direct path to the integration's directory. If this is provided, the script will load the integration from this path. The positional `domain` argument becomes optional, and if not provided, will be inferred from the directory name. Example: `uv run checker.py --integration-path /path/to/my_integration`
+
 ## --target-scale
 
 By default it will stop checking rules for the first integration quality scale level that has rules left to be done. Set `--target-scale silver` to check all rules for the silver level and below.

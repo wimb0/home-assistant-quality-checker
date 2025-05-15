@@ -9,21 +9,18 @@
 # ///
 """Check quality scale for an integration."""
 
+import argparse
 import datetime
-import logging
 import json
 import ast
 import sys
+import time
 import yaml
 from pathlib import Path
 
 from google import genai
 import requests
 import tiktoken
-
-# Setting up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 FREE_MODEL = "gemini-2.5-flash-preview-04-17"
 PAID_MODEL = "gemini-2.5-pro-preview-05-06"
@@ -35,6 +32,20 @@ DOCS_URL = "https://www.home-assistant.io/integrations/{}/"
 
 SCRIPT_DIR = Path(__file__).parent
 OUTPUT_DIR = SCRIPT_DIR / "generated"
+
+HA_FILES = {
+    "manifest.json",
+    "strings.json",
+    "services.yaml",
+    "icons.json",
+}
+
+IGNORE_FILES = {
+    "open_epaper_link": {
+        "image_decompressor.py",
+        "imagegen.py",
+    }
+}
 
 RULE_REVIEW_PROMPT = """
 You are an expert Home Assistant code reviewer specializing in the Integration Quality Scale. Your task is to meticulously analyze a given Home Assistant integration's code against a specific quality scale rule.
@@ -157,10 +168,16 @@ def get_integration_files_for_prompt(integration_path: Path) -> str:
     Get all files for the integration to be used in the prompt.
     """
     name = integration_path.name
+    ignored_files = IGNORE_FILES.get(name, set())
     integration_files = []
     priority_extensions = {
         "manifest.json": 1,
         "__init__.py": 2,
+        "coordinator.py": 3,
+        "api.py": 3,
+        "entity.py": 3,
+        "application_credentials.py": 3,
+        "config_flow.py": 4,
         ".py": 5,
         ".yaml": 8,
         ".json": 10,
@@ -176,7 +193,16 @@ def get_integration_files_for_prompt(integration_path: Path) -> str:
             ),
         ),
     ):
-        if "__pycache__" in file_path.parts or not file_path.is_file():
+        if (
+            "__pycache__" in file_path.parts
+            or not file_path.is_file()
+            or file_path.name in ignored_files
+            or (
+                # Exclude non HA system files
+                file_path.name not in HA_FILES and
+                # and non Python files
+                file_path.suffix not in (".py",))
+        ):
             continue
 
         integration_files.append(
@@ -198,21 +224,27 @@ def get_args() -> tuple:
     """
     Get command line arguments.
     """
-    import argparse
-
     parser = argparse.ArgumentParser(
         description="Check quality scale for an integration."
     )
     parser.add_argument(
         "integration",
-        help="The integration to check.",
+        help="The integration domain to check. Optional if --integration-path is provided.",
         type=str,
+        nargs="?",
+        default=None,
     )
     parser.add_argument(
         "--core-path",
         help="Path to Home Assistant core.",
         type=str,
         default="../core",
+    )
+    parser.add_argument(
+        "--integration-path",
+        help="Path to the integration directory. Overrides constructing path from --core-path and integration domain.",
+        type=str,
+        default=None,
     )
     parser.add_argument(
         "--target-scale",
@@ -253,14 +285,21 @@ def main(token: str, args) -> None:
     """
     core_path = Path(args.core_path).resolve()
 
-    if not core_path.is_dir():
-        logger.error(f"Core path {core_path} does not exist.")
+    if not args.integration and not args.integration_path:
+        print("Either an integration domain or --integration-path must be provided.")
         sys.exit(1)
 
-    integration_path = core_path / "homeassistant" / "components" / args.integration
+    if args.integration_path:
+        integration_path = Path(args.integration_path).resolve()
+        args.integration = integration_path.name
+    else:
+        if not core_path.is_dir():
+            print(f"Core path {core_path} does not exist.")
+            sys.exit(1)
+        integration_path = core_path / "homeassistant" / "components" / args.integration
 
     if not integration_path.is_dir():
-        logger.error(f"Integration path {integration_path} does not exist.")
+        print(f"Integration path {integration_path} does not exist.")
         sys.exit(1)
 
     rules = get_quality_scale_rules(core_path)
@@ -273,7 +312,7 @@ def main(token: str, args) -> None:
         integration_quality_scale not in ("LEGACY", "UNKNOWN")
         and integration_quality_scale not in rules
     ):
-        logger.error(
+        print(
             f"Integration quality scale {integration_quality_scale} is not supported."
         )
         sys.exit(1)
@@ -323,6 +362,11 @@ def main(token: str, args) -> None:
 
     if printed_something:
         print()
+
+    if not rules_to_check:
+        print(f"No rules to check for {args.integration}.")
+        sys.exit(0)
+
     print("Generating report for rules:")
     for idx, rule in enumerate(rules_to_check):
         print(f"  {rule}")
@@ -350,8 +394,13 @@ def main(token: str, args) -> None:
 
     model = FREE_MODEL if args.free_model else PAID_MODEL
 
+    total = len(rules_to_check)
+    current = 0
+
     for rule, report_path in rules_to_check.items():
-        start_time = datetime.datetime.now()
+        current += 1
+        print(f"Generating report {current}/{total} for {rule}...")
+        start_time = time.time()
         response = client.models.generate_content(
             model=model,
             contents=RULE_REVIEW_PROMPT.format(
@@ -374,11 +423,18 @@ _Created at {datetime}. Prompt tokens: {prompt_tokens}, Output tokens: {output_t
             total_tokens=response.usage_metadata.total_token_count,
         )
 
-        end_time = datetime.datetime.now()
-        duration = end_time - start_time
-
+        duration = time.time() - start_time
         report_path.write_text(report, encoding="utf-8")
-        print(f"Report for {rule} generated at {report_path.relative_to(SCRIPT_DIR)} (took {duration.total_seconds():.1f}s)")
+        print(
+            f"Report generated at {report_path.relative_to(SCRIPT_DIR)} in {duration:.1f}s"
+        )
+        print(
+            "Prompt tokens: {prompt_tokens}, Output tokens: {output_tokens}, Total tokens: {total_tokens}".format(
+                prompt_tokens=response.usage_metadata.prompt_token_count,
+                output_tokens=response.usage_metadata.candidates_token_count,
+                total_tokens=response.usage_metadata.total_token_count,
+            )
+        )
         print()
         if args.single_rule:
             break
