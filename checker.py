@@ -199,9 +199,11 @@ def get_integration_files_for_prompt(integration_path: Path) -> str:
             or file_path.name in ignored_files
             or (
                 # Exclude non HA system files
-                file_path.name not in HA_FILES and
+                file_path.name not in HA_FILES
+                and
                 # and non Python files
-                file_path.suffix not in (".py",))
+                file_path.suffix not in (".py",)
+            )
         ):
             continue
 
