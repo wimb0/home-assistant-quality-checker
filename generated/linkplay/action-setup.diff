@@ -1,0 +1,231 @@
+```diff
+--- a/homeassistant/components/linkplay/__init__.py
++++ b/homeassistant/components/linkplay/__init__.py
+@@ -1,20 +1,35 @@
+ """Support for LinkPlay devices."""
+ 
++import logging
+ from dataclasses import dataclass
+ 
+ from aiohttp import ClientSession
++import voluptuous as vol
+ from linkplay.bridge import LinkPlayBridge
+ from linkplay.controller import LinkPlayController
+ from linkplay.discovery import linkplay_factory_httpapi_bridge
+ from linkplay.exceptions import LinkPlayRequestException
+ 
+-from homeassistant.config_entries import ConfigEntry
++from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+ from homeassistant.const import CONF_HOST
+-from homeassistant.core import HomeAssistant
+-from homeassistant.exceptions import ConfigEntryNotReady
+-
+-from .const import DOMAIN, PLATFORMS, SHARED_DATA, LinkPlaySharedData
++from homeassistant.core import HomeAssistant, ServiceCall
++from homeassistant.exceptions import (
++    ConfigEntryNotReady,
++    HomeAssistantError,
++    ServiceValidationError,
++)
++from homeassistant.helpers import config_validation as cv, entity_registry as er
++from homeassistant.helpers.typing import ConfigType
++
++from .const import (
++    ATTR_PRESET_NUMBER,
++    DOMAIN,
++    PLATFORMS,
++    SERVICE_PLAY_PRESET,
++    SHARED_DATA,
++    LinkPlaySharedData,
++)
+ from .utils import async_get_client_session
+ 
++_LOGGER = logging.getLogger(__name__)
+ 
+ @dataclass
+ class LinkPlayData:
+@@ -25,6 +40,81 @@
+ 
+ 
+ type LinkPlayConfigEntry = ConfigEntry[LinkPlayData]
++
++
++SERVICE_PLAY_PRESET_SCHEMA = cv.make_entity_service_schema(
++    {
++        vol.Required(ATTR_PRESET_NUMBER): cv.positive_int,
++    }
++)
++
++
++async def _async_handle_play_preset(hass: HomeAssistant, call: ServiceCall) -> None:
++    """Handle the play_preset service call."""
++    entity_registry_instance = er.async_get(hass)
++    entity_id = call.data[er.ATTR_ENTITY_ID]
++
++    entity_entry = entity_registry_instance.async_get(entity_id)
++    if not entity_entry:
++        msg = f"Entity {entity_id} not found."
++        raise ServiceValidationError(
++            msg,
++            translation_domain=DOMAIN,
++            translation_key="entity_not_found",
++            translation_placeholders={"entity_id": entity_id},
++        )
++
++    if not entity_entry.config_entry_id:
++        msg = f"Entity {entity_id} is not associated with a config entry."
++        raise ServiceValidationError(
++            msg,
++            translation_domain=DOMAIN,
++            translation_key="entity_not_associated_with_config_entry",
++            translation_placeholders={"entity_id": entity_id},
++        )
++
++    config_entry = hass.config_entries.async_get_entry(entity_entry.config_entry_id)
++    if not config_entry:
++        msg = (
++            f"Configuration entry {entity_entry.config_entry_id} not found for entity"
++            f" {entity_id}."
++        )
++        raise ServiceValidationError(
++            msg,
++            translation_domain=DOMAIN,
++            translation_key="config_entry_not_found",
++            translation_placeholders={"config_entry_id": entity_entry.config_entry_id, "entity_id": entity_id},
++        )
++
++    if config_entry.domain != DOMAIN:
++        msg = (
++            f"Configuration entry {config_entry.entry_id} (for entity {entity_id}) is"
++            f" not a {DOMAIN} entry."
++        )
++        raise ServiceValidationError(
++            msg,
++            translation_domain=DOMAIN,
++            translation_key="config_entry_wrong_domain",
++            translation_placeholders={"config_entry_id": config_entry.entry_id, "entity_id": entity_id, "domain": DOMAIN},
++        )
++
++    if config_entry.state is not ConfigEntryState.LOADED:
++        msg = (
++            f"Configuration entry for {DOMAIN} entity {entity_id} is not loaded (State:"
++            f" {config_entry.state}). The service cannot be executed."
++        )
++        raise ServiceValidationError(
++            msg,
++            translation_domain=DOMAIN,
++            translation_key="config_entry_not_loaded",
++            translation_placeholders={"entity_id": entity_id, "state": str(config_entry.state)},
++        )
++
++    # Type safety: LinkPlayConfigEntry is ConfigEntry[LinkPlayData].
++    # If state is LOADED and domain matches, runtime_data should be LinkPlayData.
++    bridge = config_entry.runtime_data.bridge
++    preset_number = call.data[ATTR_PRESET_NUMBER]
++
++    try:
++        await bridge.player.play_preset(preset_number)
++    except ValueError as err:
++        msg = f"Failed to play preset {preset_number} for {entity_id}: {err}"
++        raise ServiceValidationError(
++            msg,
++            translation_domain=DOMAIN,
++            translation_key="play_preset_value_error",
++            translation_placeholders={"preset_number": str(preset_number), "entity_id": entity_id, "error": str(err)},
++        ) from err
++    except LinkPlayRequestException as err:
++        msg = (
++            f"Error communicating with LinkPlay device for {entity_id} while playing"
++            f" preset: {err}"
++        )
++        raise HomeAssistantError(msg) from err
++
++
++async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
++    """Set up the LinkPlay integration."""
++    hass.services.async_register(
++        DOMAIN,
++        SERVICE_PLAY_PRESET,
++        lambda call: _async_handle_play_preset(hass, call),
++        schema=SERVICE_PLAY_PRESET_SCHEMA,
++    )
++    return True
+ 
+ 
+ async def async_setup_entry(hass: HomeAssistant, entry: LinkPlayConfigEntry) -> bool:
+--- a/homeassistant/components/linkplay/const.py
++++ b/homeassistant/components/linkplay/const.py
+@@ -16,3 +16,6 @@
+ SHARED_DATA_KEY: HassKey[LinkPlaySharedData] = HassKey(SHARED_DATA)
+ PLATFORMS = [Platform.BUTTON, Platform.MEDIA_PLAYER]
+ DATA_SESSION = "session"
++
++SERVICE_PLAY_PRESET = "play_preset"
++ATTR_PRESET_NUMBER = "preset_number"
+--- a/homeassistant/components/linkplay/media_player.py
++++ b/homeassistant/components/linkplay/media_player.py
+@@ -6,7 +6,6 @@
+ from linkplay.consts import EqualizerMode, LoopMode, PlayingMode, PlayingStatus
+ from linkplay.controller import LinkPlayController, LinkPlayMultiroom
+ from linkplay.exceptions import LinkPlayRequestException
+-import voluptuous as vol
+ 
+ from homeassistant.components import media_source
+ from homeassistant.components.media_player import (
+@@ -20,8 +19,8 @@
+     async_process_play_media_url,
+ )
+ from homeassistant.core import HomeAssistant
+-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+-from homeassistant.helpers import config_validation as cv, entity_platform
++from homeassistant.exceptions import ServiceValidationError
++from homeassistant.helpers import entity_platform
+ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+ from homeassistant.util.dt import utcnow
+ 
+@@ -84,15 +83,6 @@
+     | MediaPlayerEntityFeature.SEEK
+ )
+ 
+-SERVICE_PLAY_PRESET = "play_preset"
+-ATTR_PRESET_NUMBER = "preset_number"
+-
+-SERVICE_PLAY_PRESET_SCHEMA = cv.make_entity_service_schema(
+-    {
+-        vol.Required(ATTR_PRESET_NUMBER): cv.positive_int,
+-    }
+-)
+-
+ RETRY_POLL_MAXIMUM = 3
+ SCAN_INTERVAL = timedelta(seconds=5)
+ PARALLEL_UPDATES = 1
+@@ -104,12 +94,6 @@
+     async_add_entities: AddConfigEntryEntitiesCallback,
+ ) -> None:
+     """Set up a media player from a config entry."""
+-
+-    # register services
+-    platform = entity_platform.async_get_current_platform()
+-    platform.async_register_entity_service(
+-        SERVICE_PLAY_PRESET, SERVICE_PLAY_PRESET_SCHEMA, "async_play_preset"
+-    )
+ 
+     # add entities
+     async_add_entities([LinkPlayMediaPlayerEntity(entry.runtime_data.bridge)])
+@@ -221,14 +205,6 @@
+         await self._bridge.player.play(url)
+ 
+     @exception_wrap
+-    async def async_play_preset(self, preset_number: int) -> None:
+-        """Play preset number."""
+-        try:
+-            await self._bridge.player.play_preset(preset_number)
+-        except ValueError as err:
+-            raise HomeAssistantError(err) from err
+-
+-    @exception_wrap
+     async def async_media_seek(self, position: float) -> None:
+         """Seek to a position."""
+         await self._bridge.player.seek(round(position))
+
+```

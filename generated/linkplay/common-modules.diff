@@ -1,0 +1,258 @@
+```diff
+--- /dev/null
++++ b/homeassistant/components/linkplay/coordinator.py
+@@ -0,0 +1,30 @@
++"""DataUpdateCoordinator for the LinkPlay integration."""
++
++import logging
++from datetime import timedelta
++
++from linkplay.bridge import LinkPlayBridge
++from linkplay.exceptions import LinkPlayRequestException
++
++from homeassistant.core import HomeAssistant
++from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
++
++from .const import DOMAIN
++
++_LOGGER = logging.getLogger(__name__)
++
++
++class LinkPlayDataUpdateCoordinator(DataUpdateCoordinator[None]):
++    """Class to manage fetching LinkPlay device data."""
++
++    def __init__(self, hass: HomeAssistant, bridge: LinkPlayBridge, host: str) -> None:
++        """Initialize coordinator."""
++        self.bridge = bridge
++        super().__init__(
++            hass,
++            _LOGGER,
++            name=f"{DOMAIN} {host}",
++            update_interval=timedelta(seconds=10),
++        )
++
++    async def _async_update_data(self) -> None:
++        """Fetch data from LinkPlay device."""
++        try:
++            await self.bridge.player.update_status()
++        except LinkPlayRequestException as err:
++            raise UpdateFailed(f"Error communicating with LinkPlay device: {err}") from err
+--- a/homeassistant/components/linkplay/__init__.py
++++ b/homeassistant/components/linkplay/__init__.py
+@@ -12,6 +12,7 @@
+ 
+ from .const import DOMAIN, PLATFORMS, SHARED_DATA, LinkPlaySharedData
+ from .utils import async_get_client_session
++from .coordinator import LinkPlayDataUpdateCoordinator
+ 
+ 
+ @dataclass
+@@ -19,6 +20,7 @@
+     """Data for LinkPlay."""
+ 
+     bridge: LinkPlayBridge
++    coordinator: LinkPlayDataUpdateCoordinator
+ 
+ 
+ type LinkPlayConfigEntry = ConfigEntry[LinkPlayData]
+@@ -48,8 +50,11 @@
+     await controller.add_bridge(bridge)
+     await controller.discover_multirooms()
+ 
++    coordinator = LinkPlayDataUpdateCoordinator(hass, bridge, entry.data[CONF_HOST])
++    await coordinator.async_config_entry_first_refresh()
++
+     # forward to platforms
+-    entry.runtime_data = LinkPlayData(bridge=bridge)
++    entry.runtime_data = LinkPlayData(bridge=bridge, coordinator=coordinator)
+     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+     return True
+ 
+--- a/homeassistant/components/linkplay/media_player.py
++++ b/homeassistant/components/linkplay/media_player.py
+@@ -1,7 +1,6 @@
+ """Support for LinkPlay media players."""
+ 
+ from __future__ import annotations
+-
+-from datetime import timedelta
+ import logging
+ from typing import Any
+ 
+@@ -16,16 +15,18 @@
+     MediaPlayerState,
+     MediaType,
+     RepeatMode,
+     async_process_play_media_url,
+ )
+-from homeassistant.core import HomeAssistant
++from homeassistant.core import HomeAssistant, callback
+ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+ from homeassistant.helpers import config_validation as cv, entity_platform
+ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
++from homeassistant.helpers.update_coordinator import CoordinatorEntity
+ from homeassistant.util.dt import utcnow
+ 
+ from . import SHARED_DATA, LinkPlayConfigEntry
+ from .const import DOMAIN
++from .coordinator import LinkPlayDataUpdateCoordinator
+ from .entity import LinkPlayBaseEntity, exception_wrap
+ 
+ _LOGGER = logging.getLogger(__name__)
+@@ -87,9 +88,6 @@
+     }
+ )
+ 
+-RETRY_POLL_MAXIMUM = 3
+-SCAN_INTERVAL = timedelta(seconds=5)
+-PARALLEL_UPDATES = 1
+ 
+ 
+ async def async_setup_entry(
+@@ -106,20 +104,30 @@
+     )
+ 
+     # add entities
+-    async_add_entities([LinkPlayMediaPlayerEntity(entry.runtime_data.bridge)])
+-
+-
+-class LinkPlayMediaPlayerEntity(LinkPlayBaseEntity, MediaPlayerEntity):
++    bridge = entry.runtime_data.bridge
++    coordinator = entry.runtime_data.coordinator
++    async_add_entities([LinkPlayMediaPlayerEntity(bridge, coordinator)])
++
++
++class LinkPlayMediaPlayerEntity(
++    LinkPlayBaseEntity, CoordinatorEntity[LinkPlayDataUpdateCoordinator], MediaPlayerEntity
++):
+     """Representation of a LinkPlay media player."""
+ 
+     _attr_device_class = MediaPlayerDeviceClass.RECEIVER
+     _attr_media_content_type = MediaType.MUSIC
+     _attr_name = None
+-
+-    def __init__(self, bridge: LinkPlayBridge) -> None:
++    # _attr_has_entity_name = True is inherited from LinkPlayBaseEntity
++
++    def __init__(
++        self, bridge: LinkPlayBridge, coordinator: LinkPlayDataUpdateCoordinator
++    ) -> None:
+         """Initialize the LinkPlay media player."""
+ 
+         super().__init__(bridge)
++        CoordinatorEntity.__init__(self, coordinator)
+         self._attr_unique_id = bridge.device.uuid
+-        self._retry_count = 0
+ 
+         self._attr_source_list = [
+             SOURCE_MAP[playing_mode] for playing_mode in bridge.device.playmode_support
+@@ -127,21 +135,25 @@
+         self._attr_sound_mode_list = [
+             mode.value for mode in bridge.player.available_equalizer_modes
+         ]
++        # Initial property update based on current bridge state
++        # (which might have been updated by coordinator's first refresh)
++        self._update_properties_from_bridge()
+ 
+     async def async_added_to_hass(self) -> None:
+         """Handle common setup when added to hass."""
+         await super().async_added_to_hass()
+         self.hass.data[DOMAIN][SHARED_DATA].entity_to_bridge[self.entity_id] = (
+             self._bridge.device.uuid
+         )
+ 
+-    @exception_wrap
+-    async def async_update(self) -> None:
+-        """Update the state of the media player."""
+-        try:
+-            await self._bridge.player.update_status()
+-            self._retry_count = 0
+-            self._update_properties()
+-        except LinkPlayRequestException:
+-            self._retry_count += 1
+-            if self._retry_count >= RETRY_POLL_MAXIMUM:
+-                self._attr_available = False
++    @callback
++    def _handle_coordinator_update(self) -> None:
++        """Handle updated data from the coordinator."""
++        self._update_properties_from_bridge()
++        self.async_write_ha_state()
++
++    def _update_properties_from_bridge(self) -> None:
++        """Update the properties of the media player from the bridge object."""
++        self._attr_available = True # Called on successful coordinator update
++        player_status = self._bridge.player.status
++
++        self._attr_state = STATE_MAP[player_status]
++        self._attr_volume_level = self._bridge.player.volume / 100
++        self._attr_is_volume_muted = self._bridge.player.muted
++        self._attr_repeat = REPEAT_MAP[self._bridge.player.loop_mode]
++        self._attr_shuffle = self._bridge.player.loop_mode == LoopMode.RANDOM_PLAYBACK
++        self._attr_sound_mode = self._bridge.player.equalizer_mode.value
++        self._attr_supported_features = DEFAULT_FEATURES
++
++        if player_status == PlayingStatus.PLAYING:
++            if self._bridge.player.total_length != 0:
++                self._attr_supported_features = (
++                    self._attr_supported_features | SEEKABLE_FEATURES
++                )
++
++            self._attr_source = SOURCE_MAP.get(self._bridge.player.play_mode, "other")
++            self._attr_media_position = self._bridge.player.current_position_in_seconds
++            self._attr_media_position_updated_at = utcnow()
++            self._attr_media_duration = self._bridge.player.total_length_in_seconds
++            self._attr_media_artist = self._bridge.player.artist
++            self._attr_media_title = self._bridge.player.title
++            self._attr_media_album_name = self._bridge.player.album
++        elif player_status == PlayingStatus.STOPPED:
++            self._attr_media_position = None
++            self._attr_media_position_updated_at = None
++            self._attr_media_artist = None
++            self._attr_media_title = None
++            self._attr_media_album_name = None
+ 
+     @exception_wrap
+     async def async_select_source(self, source: str) -> None:
+@@ -266,28 +278,10 @@
+ 
+         await controller.discover_multirooms()
+ 
+-    def _update_properties(self) -> None:
+-        """Update the properties of the media player."""
+-        self._attr_available = True
+-        self._attr_state = STATE_MAP[self._bridge.player.status]
+-        self._attr_volume_level = self._bridge.player.volume / 100
+-        self._attr_is_volume_muted = self._bridge.player.muted
+-        self._attr_repeat = REPEAT_MAP[self._bridge.player.loop_mode]
+-        self._attr_shuffle = self._bridge.player.loop_mode == LoopMode.RANDOM_PLAYBACK
+-        self._attr_sound_mode = self._bridge.player.equalizer_mode.value
+-        self._attr_supported_features = DEFAULT_FEATURES
+-
+-        if self._bridge.player.status == PlayingStatus.PLAYING:
+-            if self._bridge.player.total_length != 0:
+-                self._attr_supported_features = (
+-                    self._attr_supported_features | SEEKABLE_FEATURES
+-                )
+-
+-            self._attr_source = SOURCE_MAP.get(self._bridge.player.play_mode, "other")
+-            self._attr_media_position = self._bridge.player.current_position_in_seconds
+-            self._attr_media_position_updated_at = utcnow()
+-            self._attr_media_duration = self._bridge.player.total_length_in_seconds
+-            self._attr_media_artist = self._bridge.player.artist
+-            self._attr_media_title = self._bridge.player.title
+-            self._attr_media_album_name = self._bridge.player.album
+-        elif self._bridge.player.status == PlayingStatus.STOPPED:
+-            self._attr_media_position = None
+-            self._attr_media_position_updated_at = None
+-            self._attr_media_artist = None
+-            self._attr_media_title = None
+-            self._attr_media_album_name = None
++    @property
++    def available(self) -> bool:
++        """Return if entity is available."""
++        # Relies on CoordinatorEntity.available for coordinator health
++        # (which checks coordinator.last_update_success and self._attr_available set by _handle_coordinator_update)
++        # and adds a check for the bridge object.
++        return super().available and self._bridge is not None
+
+```
