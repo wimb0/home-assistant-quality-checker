@@ -50,6 +50,10 @@ Set `--dry-run` to only print the rules that would be checked, without actually 
 
 Set `--include-done` to generate reports for rules that are already marked done.
 
+#### --publish
+
+When set, the script will create a commit with the generated reports and push it to the `main` branch of the repository. This is useful for automating the generation of reports.
+
 ### fixer.py
 
 This script will take a generated report and use it to fix the issues in the integration by generating a diff.

@@ -279,6 +279,11 @@ def get_args() -> tuple:
         help="Only run the first applicable rule.",
         action="store_true",
     )
+    parser.add_argument(
+        "--publish",
+        help="Commit and push changes in generated/INTEGRATION_NAME directory after generating reports.",
+        action="store_true",
+    )
     return parser.parse_args()
 
 
@@ -471,6 +476,26 @@ def main(token: str, args) -> None:
         print()
         if args.single_rule:
             break
+
+    if not args.publish:
+        return
+
+    subprocess.run(
+        ["git", "add", str(output_dir)],
+        check=True,
+        cwd=SCRIPT_DIR,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", f"Update reports for {args.integration}"],
+        check=True,
+        cwd=SCRIPT_DIR,
+    )
+    subprocess.run(
+        ["git", "push"],
+        check=True,
+        cwd=SCRIPT_DIR,
+    )
+    print(f"Successfully published changes for {args.integration}.")
 
 
 if __name__ == "__main__":
