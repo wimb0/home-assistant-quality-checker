@@ -495,7 +495,8 @@ def main(token: str, args) -> None:
         check=True,
         cwd=SCRIPT_DIR,
     )
-    print(f"Successfully published changes for {args.integration}.")
+    print(f"Successfully published changes for {args.integration}:")
+    print(f"https://github.com/balloob/home-assistant-quality-checker/tree/main/generated/{args.integration}")
 
 
 if __name__ == "__main__":
