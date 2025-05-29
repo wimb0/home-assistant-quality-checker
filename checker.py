@@ -289,7 +289,9 @@ def main(token: str, args) -> None:
     core_path = Path(args.core_path).resolve()
 
     if not args.integration and not args.integration_path:
-        print("Error: Either an integration domain or --integration-path must be provided.")
+        print(
+            "Error: Either an integration domain or --integration-path must be provided."
+        )
         sys.exit(1)
 
     core_commit_sha = None
@@ -307,7 +309,7 @@ def main(token: str, args) -> None:
                 cwd=core_path,
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
             )
             core_commit_sha = result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
@@ -419,6 +421,7 @@ def main(token: str, args) -> None:
         current += 1
         print(f"Generating report {current}/{total} for {rule}...")
         start_time = time.time()
+        report = "bla"
         response = client.models.generate_content(
             model=model,
             contents=RULE_REVIEW_PROMPT.format(
@@ -433,25 +436,25 @@ def main(token: str, args) -> None:
         report = response.text
 
         footer = [
-            "Created at {datetime}. Prompt tokens: {prompt_tokens}, Output tokens: {output_tokens}, Total tokens: {total_tokens}".format(
-            datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            prompt_tokens=response.usage_metadata.prompt_token_count,
-            output_tokens=response.usage_metadata.candidates_token_count,
-            total_tokens=response.usage_metadata.total_token_count,
-
+            "Created at {datetime}. Prompt tokens: {prompt_tokens}, Output tokens: {output_tokens}, Total tokens: {total_tokens}.".format(
+                datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                prompt_tokens=response.usage_metadata.prompt_token_count,
+                output_tokens=response.usage_metadata.candidates_token_count,
+                total_tokens=response.usage_metadata.total_token_count,
             )
         ]
         if core_commit_sha:
-            footer.append("Report based on [`{commit_sha_short}`](https://github.com/home-assistant/core/tree/{commit_sha})".format(
-                commit_sha=core_commit_sha,
-                commit_sha_short=core_commit_sha[:7],
-            ))
+            footer.append(
+                "Report based on [`{commit_sha_short}`](https://github.com/home-assistant/core/tree/{commit_sha}).".format(
+                    commit_sha=core_commit_sha,
+                    commit_sha_short=core_commit_sha[:7],
+                )
+            )
 
-        footer.append("")
         footer.append(
             "AI can be wrong. Always verify the report and the code against the rule."
         )
-        report += "\n\n---\n\n" + "\n".join(f"_{s}_" if s else "" for s in footer) + "\n"
+        report += "\n\n---\n\n" + "\n\n".join(f"_{s}_" for s in footer) + "\n"
 
         duration = time.time() - start_time
         report_path.write_text(report, encoding="utf-8")
