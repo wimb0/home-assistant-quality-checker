@@ -13,6 +13,7 @@ import argparse
 import datetime
 import json
 import ast
+import subprocess
 import sys
 import time
 import yaml
@@ -288,20 +289,35 @@ def main(token: str, args) -> None:
     core_path = Path(args.core_path).resolve()
 
     if not args.integration and not args.integration_path:
-        print("Either an integration domain or --integration-path must be provided.")
+        print("Error: Either an integration domain or --integration-path must be provided.")
         sys.exit(1)
+
+    core_commit_sha = None
 
     if args.integration_path:
         integration_path = Path(args.integration_path).resolve()
         args.integration = integration_path.name
+    elif not core_path.is_dir():
+        print(f"Error: Core path {core_path} does not exist.")
+        sys.exit(1)
     else:
-        if not core_path.is_dir():
-            print(f"Core path {core_path} does not exist.")
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=core_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            core_commit_sha = result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"Error: Could not get commit SHA from {core_path}: {e}")
             sys.exit(1)
+
         integration_path = core_path / "homeassistant" / "components" / args.integration
 
     if not integration_path.is_dir():
-        print(f"Integration path {integration_path} does not exist.")
+        print(f"Error: Integration path {integration_path} does not exist.")
         sys.exit(1)
 
     rules = get_quality_scale_rules(core_path)
@@ -315,7 +331,7 @@ def main(token: str, args) -> None:
         and integration_quality_scale not in rules
     ):
         print(
-            f"Integration quality scale {integration_quality_scale} is not supported."
+            f"Error: Integration quality scale {integration_quality_scale} is not supported."
         )
         sys.exit(1)
 
@@ -415,15 +431,27 @@ def main(token: str, args) -> None:
         )
 
         report = response.text
-        report += """
 
-_Created at {datetime}. Prompt tokens: {prompt_tokens}, Output tokens: {output_tokens}, Total tokens: {total_tokens}_
-""".format(
+        footer = [
+            "Created at {datetime}. Prompt tokens: {prompt_tokens}, Output tokens: {output_tokens}, Total tokens: {total_tokens}".format(
             datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             prompt_tokens=response.usage_metadata.prompt_token_count,
             output_tokens=response.usage_metadata.candidates_token_count,
             total_tokens=response.usage_metadata.total_token_count,
+
+            )
+        ]
+        if core_commit_sha:
+            footer.append("Report based on [`{commit_sha_short}`](https://github.com/home-assistant/core/tree/{commit_sha})".format(
+                commit_sha=core_commit_sha,
+                commit_sha_short=core_commit_sha[:7],
+            ))
+
+        footer.append("")
+        footer.append(
+            "AI can be wrong. Always verify the report and the code against the rule."
         )
+        report += "\n\n---\n\n" + "\n".join(f"_{s}_" if s else "" for s in footer) + "\n"
 
         duration = time.time() - start_time
         report_path.write_text(report, encoding="utf-8")
