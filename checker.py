@@ -24,7 +24,7 @@ import requests
 import tiktoken
 
 FREE_MODEL = "gemini-2.5-flash-preview-04-17"
-PAID_MODEL = "gemini-2.5-pro-preview-05-06"
+PAID_MODEL = "gemini-2.5-pro-preview-06-05"
 QUALITY_SCALE_RULE_RAW_URL = "https://raw.githubusercontent.com/home-assistant/developers.home-assistant/refs/heads/master/docs/core/integration-quality-scale/rules/{}.md"
 QUALITY_SCALE_RULE_DOCS_URL = (
     "https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/{}"
